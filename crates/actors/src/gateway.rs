@@ -1,58 +1,58 @@
 use crate::messages::{AuditMsg, EngineMsg, GatewayMsg};
-use common::{NewOrder, ValidatedOrder};
+use common::{GatewayError, NewOrder, ValidatedOrder};
 use tokio::sync::mpsc;
 
 pub struct GatewayActor {
     next_id: i32,
     rx: mpsc::Receiver<GatewayMsg>,
     engine_tx: mpsc::Sender<EngineMsg>,
-    audit_tx: mpsc::Sender<AuditMsg>,
+    _audit_tx: mpsc::Sender<AuditMsg>,
 }
 
 impl GatewayActor {
     // si dejaba mut self no funcionaba
-    async fn validate_new_order(&mut self, new_order: NewOrder) {
-        if new_order.qty > 0 && new_order.price > 0 {
+    async fn validate_new_order(&mut self, new_order: NewOrder) -> Result<(), GatewayError> {
+        let qty = new_order.qty;
+        let price = new_order.price;
+
+        if qty < 0 {
+            Err(GatewayError::InvalidQty { qty })
+        } else if price < 0 {
+            Err(GatewayError::InvalidPrice { price })
+        } else {
             self.next_id += 1;
-            let validated_order_id: i32 = self.next_id;
+            let order_id: i32 = self.next_id;
             let valid_order: ValidatedOrder = ValidatedOrder {
-                order_id: validated_order_id,
+                order_id,
                 user_id: new_order.user_id,
                 side: new_order.side,
-                qty: new_order.qty,
-                price: new_order.price,
+                qty,
+                price,
             };
-            if self
-                .engine_tx
+            self.engine_tx
                 .send(EngineMsg::Order(valid_order))
                 .await
-                .is_err()
-            {
-                println!("ERROR SENDING VALID ORDER");
-            }
-        } else {
-            if self.audit_tx.send(AuditMsg::RejectedOrder).await.is_err() {
-                println!("ERROR SENDING REJECTED ORDER");
-            }
+                .map_err(|_| GatewayError::EngineChannelClosed)?;
+
+            Ok(())
         }
     }
 
     // por que tiene que ser mut self ?
-    pub async fn run(mut self) {
+    pub async fn run(mut self) -> Result<(), GatewayError> {
         while let Some(msg) = self.rx.recv().await {
             match msg {
-                GatewayMsg::NewOrder(new_order) => {
-                    println!("New order received: {:?}", new_order);
-                    self.validate_new_order(new_order).await;
-                }
+                GatewayMsg::NewOrder(new_order) => self.validate_new_order(new_order).await?,
                 GatewayMsg::Shutdown => {
-                    if self.engine_tx.send(EngineMsg::Shutdown).await.is_err() {
-                        println!("ERROR SENDING SHUTDOWN");
-                    };
-                    break;
+                    self.engine_tx
+                        .send(EngineMsg::Shutdown)
+                        .await
+                        .map_err(|_| GatewayError::EngineChannelClosed)?;
                 }
             }
         }
+
+        Ok(())
     }
 
     pub fn new(
@@ -64,7 +64,7 @@ impl GatewayActor {
             next_id: 0,
             rx,
             engine_tx,
-            audit_tx,
+            _audit_tx: audit_tx,
         }
     }
 }

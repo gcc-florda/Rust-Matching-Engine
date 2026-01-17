@@ -1,5 +1,5 @@
 use crate::messages::{AuditMsg, EngineMsg};
-use common::{Side, Trade, ValidatedOrder};
+use common::{EngineError, Side, Trade, ValidatedOrder};
 use std::cmp;
 use tokio::sync::mpsc;
 
@@ -10,7 +10,7 @@ pub struct MatchingEngineActor {
 }
 
 impl MatchingEngineActor {
-    async fn process_order(&mut self, order: ValidatedOrder) {
+    async fn process_order(&mut self, order: ValidatedOrder) -> Result<(), EngineError> {
         let mut found = false;
         let mut new_order: Option<ValidatedOrder> = None;
         let mut remove_idx: Option<usize> = None;
@@ -49,9 +49,10 @@ impl MatchingEngineActor {
                     remove_idx = Some(i);
                 }
 
-                if self.audit_tx.send(AuditMsg::Trade(trade)).await.is_err() {
-                    println!("ERROR SENDING TRADE");
-                }
+                self.audit_tx
+                    .send(AuditMsg::Trade(trade))
+                    .await
+                    .map_err(|_| EngineError::AuditChannelClosed)?;
 
                 found = true;
 
@@ -84,9 +85,10 @@ impl MatchingEngineActor {
                     remove_idx = Some(i);
                 }
 
-                if self.audit_tx.send(AuditMsg::Trade(trade)).await.is_err() {
-                    println!("ERROR SENDING TRADE");
-                }
+                self.audit_tx
+                    .send(AuditMsg::Trade(trade))
+                    .await
+                    .map_err(|_| EngineError::AuditChannelClosed)?;
 
                 found = true;
 
@@ -106,23 +108,26 @@ impl MatchingEngineActor {
         }
 
         println!("OPEN ORDERS: {:?}", self.open_orders);
+        Ok(())
     }
 
-    pub async fn run(mut self) {
+    pub async fn run(mut self) -> Result<(), EngineError> {
         while let Some(msg) = self.rx.recv().await {
             match msg {
                 EngineMsg::Order(order) => {
                     println!("VALID ORDER RECEIVED: {:?}", order);
-                    self.process_order(order).await;
+                    self.process_order(order).await?
                 }
                 EngineMsg::Shutdown => {
-                    if self.audit_tx.send(AuditMsg::Shutdown).await.is_err() {
-                        println!("ERROR SENDING SHUTDOWN");
-                    }
-                    break;
+                    self.audit_tx
+                        .send(AuditMsg::Shutdown)
+                        .await
+                        .map_err(|_| EngineError::AuditChannelClosed)?;
                 }
             }
         }
+
+        Ok(())
     }
 
     pub fn new(rx: mpsc::Receiver<EngineMsg>, audit_tx: mpsc::Sender<AuditMsg>) -> Self {

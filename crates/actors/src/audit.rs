@@ -1,5 +1,5 @@
 use crate::messages::AuditMsg;
-use common::Trade;
+use common::{AuditError, Trade};
 use tokio::sync::mpsc;
 
 pub struct AuditActor {
@@ -13,7 +13,7 @@ pub struct AuditActor {
 impl AuditActor {
     // pierdo ownership de self sin en & --> pierdo el actor y ya no lo podria seguir usando despues
     // &mut self --> muto estado interno
-    fn stats(&mut self, trade: Trade) {
+    fn stats(&mut self, trade: Trade) -> Result<(), AuditError> {
         if trade.is_valid() {
             println!(
                 "Processing Buy Order: {} Sell Order: {} ",
@@ -22,19 +22,22 @@ impl AuditActor {
             self.last_prices.push(trade.price);
             self.volume_total += trade.qty;
             self.trades.push(trade);
+        } else {
+            Err(AuditError::InvalidTrade)?;
         }
+        Ok(())
     }
 
     fn rejected_order(&mut self) {
         self.rejected_orders += 1;
     }
 
-    pub async fn run(mut self) {
+    pub async fn run(mut self) -> Result<(), AuditError> {
         while let Some(msg) = self.rx.recv().await {
             match msg {
                 AuditMsg::Trade(trade) => {
                     println!("TRADE RECEIVED: {:?}", trade);
-                    self.stats(trade);
+                    self.stats(trade)?;
                 }
                 AuditMsg::RejectedOrder => self.rejected_order(),
                 AuditMsg::Shutdown => {
@@ -44,6 +47,7 @@ impl AuditActor {
                 }
             }
         }
+        Ok(())
     }
 
     pub fn new(rx: mpsc::Receiver<AuditMsg>) -> Self {

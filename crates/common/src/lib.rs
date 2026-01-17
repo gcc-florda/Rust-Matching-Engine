@@ -1,3 +1,9 @@
+pub mod errors;
+pub use errors::AuditError;
+pub use errors::EngineError;
+pub use errors::GatewayError;
+pub use errors::MainError;
+
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Side {
     Buy,
