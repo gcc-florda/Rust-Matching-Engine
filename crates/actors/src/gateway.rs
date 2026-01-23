@@ -48,6 +48,7 @@ impl GatewayActor {
                         .send(EngineMsg::Shutdown)
                         .await
                         .map_err(|_| GatewayError::EngineChannelClosed)?;
+                    break
                 }
             }
         }

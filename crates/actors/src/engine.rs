@@ -107,7 +107,7 @@ impl MatchingEngineActor {
             self.open_orders.push(order);
         }
 
-        println!("OPEN ORDERS: {:?}", self.open_orders);
+        println!("[ENGINE] OPEN ORDERS: {:?}", self.open_orders);
         Ok(())
     }
 
@@ -115,7 +115,7 @@ impl MatchingEngineActor {
         while let Some(msg) = self.rx.recv().await {
             match msg {
                 EngineMsg::Order(order) => {
-                    println!("VALID ORDER RECEIVED: {:?}", order);
+                    println!("[ENGINE] VALID ORDER RECEIVED: {:?}", order);
                     self.process_order(order).await?
                 }
                 EngineMsg::Shutdown => {
@@ -123,6 +123,7 @@ impl MatchingEngineActor {
                         .send(AuditMsg::Shutdown)
                         .await
                         .map_err(|_| EngineError::AuditChannelClosed)?;
+                    break
                 }
             }
         }

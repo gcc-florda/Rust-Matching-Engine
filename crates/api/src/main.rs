@@ -24,17 +24,35 @@ async fn main() -> Result<(), MainError> {
     let audit_handler =
         tokio::spawn(async move { audit_actor.run().await.map_err(MainError::from) });
 
-    let test_order: NewOrder = NewOrder {
+    let test_order_1: NewOrder = NewOrder {
         user_id: 1,
-        side: Side::Buy,
+        side: Side::Sell,
         qty: 2,
         price: 100,
     };
 
-    gateway_tx
-        .send(GatewayMsg::NewOrder(test_order))
+    let test_order_2: NewOrder = NewOrder {
+        user_id: 2,
+        side: Side::Buy,
+        qty: 1,
+        price: 50,
+    };
+
+    let test_order_3: NewOrder = NewOrder {
+        user_id: 3,
+        side: Side::Buy,
+        qty: 1,
+        price: 200,
+    };
+
+    let orders = vec![test_order_1, test_order_2, test_order_3];
+
+    for order in orders {
+        gateway_tx
+        .send(GatewayMsg::NewOrder(order))
         .await
-        .map_err(|_| MainError::GatewayChannelClosed)?;
+        .map_err(|_| MainError::GatewayChannelClosed)?
+    }
 
     gateway_tx
         .send(GatewayMsg::Shutdown)

@@ -16,7 +16,7 @@ impl AuditActor {
     fn stats(&mut self, trade: Trade) -> Result<(), AuditError> {
         if trade.is_valid() {
             println!(
-                "Processing Buy Order: {} Sell Order: {} ",
+                "[AUDIT] Processing Buy Order: {} Sell Order: {} ",
                 trade.buy_order_id, trade.sell_order_id
             );
             self.last_prices.push(trade.price);
@@ -36,13 +36,13 @@ impl AuditActor {
         while let Some(msg) = self.rx.recv().await {
             match msg {
                 AuditMsg::Trade(trade) => {
-                    println!("TRADE RECEIVED: {:?}", trade);
+                    println!("[AUDIT] TRADE RECEIVED: {:?}", trade);
                     self.stats(trade)?;
                 }
                 AuditMsg::RejectedOrder => self.rejected_order(),
                 AuditMsg::Shutdown => {
-                    println!("Total Volume: {}", self.volume_total);
-                    println!("Number of Trades: {}", self.trades.len());
+                    println!("[AUDIT] Total Volume: {}", self.volume_total);
+                    println!("[AUDIT] Number of Trades: {}", self.trades.len());
                     break;
                 }
             }
